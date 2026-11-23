@@ -145,17 +145,26 @@
   }
 
   function scheduleShortagesRender() { clearTimeout(shortagesRenderTimer); shortagesRenderTimer = setTimeout(renderLowStock, 180); }
+  function unitLabel(product, level) { const key = product && product['unit_' + level]; if (!key) return ''; return key === 'other' ? (product.other_note || 'أخرى') : (UNIT_LABELS[key] || key); }
   function totalSmallPerBox(product) {
     const mediumToSmall = Number(product && product.unit_medium_to_small) || 1;
     const largeToMedium = Number(product && product.unit_large_to_medium) || 1;
-    return product && product.unit_large
-      ? largeToMedium * mediumToSmall
-      : mediumToSmall;
+    return product && product.unit_large ? largeToMedium * mediumToSmall : mediumToSmall;
   }
-  function formatBoxQuantity(product, smallestUnits) {
+  function formatDynamicQuantity(product, quantity) {
+    let qty = Math.max(0, Number(quantity) || 0);
+    const med = Number(product && product.unit_medium_to_small) || 1;
+    const large = Number(product && product.unit_large_to_medium) || 1;
+    const parts = [], largeSmall = med * large;
+    if (product && product.unit_large && largeSmall > 1) { const n = Math.floor(qty / largeSmall); if (n) parts.push(n + ' ' + unitLabel(product, 'large')); qty %= largeSmall; }
+    if (product && product.unit_medium && med > 1) { const n = Math.floor(qty / med); if (n) parts.push(n + ' ' + unitLabel(product, 'medium')); qty %= med; }
+    if (qty > 0 || !parts.length) parts.push(qty + ' ' + unitLabel(product, 'small'));
+    return parts.filter(Boolean).join(' + ');
+  }
+  function formatMinimumBoxes(product, smallestUnits) {
     const perBox = totalSmallPerBox(product);
     const boxes = perBox > 0 ? (Number(smallestUnits) || 0) / perBox : 0;
-    return boxes.toLocaleString('ar-EG', { maximumFractionDigits: 2 }) + ' علبة';
+    return boxes.toLocaleString('ar-EG', { maximumFractionDigits: 2 });
   }
   function renderLowStock() {
     const wrap = document.getElementById('lowStockWrap');
@@ -171,14 +180,13 @@
     });
     rows.sort((a,b) => sort === 'stock' ? Number(a.quantity_smallest_unit)-Number(b.quantity_smallest_unit) : sort === 'recent' ? (Date.parse(lowStockLatestSaleDates[b.product_id] || '') || 0) - (Date.parse(lowStockLatestSaleDates[a.product_id] || '') || 0) : String(a.name || '').localeCompare(String(b.name || ''), 'ar'));
     if (!rows.length) { wrap.innerHTML = '<p class="empty-ok">لا توجد نتائج مطابقة للفلاتر الحالية</p>'; return; }
-    let html = '<table class="shortages-table"><colgroup><col class="col-product"><col class="col-available"><col class="col-min"><col class="col-needed"><col class="col-supply"></colgroup><thead><tr><th>المنتج</th><th>الكمية الحالية</th><th>الحد الأدنى</th><th>المطلوب لإعادة الطلب</th><th>كمية التوريد (علب)</th></tr></thead><tbody>';
+    let html = '<table class="shortages-table"><colgroup><col class="col-product"><col class="col-available"><col class="col-min"><col class="col-supply"></colgroup><thead><tr><th>المنتج</th><th>المتاح</th><th>الحد الأدنى</th><th>كمية التوريد (علب)</th></tr></thead><tbody>';
     for (const s of rows) {
       const product = lowStockUnitsMap[s.product_id] || {};
       const currentSmallestUnits = Number(s.quantity_smallest_unit) || 0;
       const minimumSmallestUnits = Number(s.min_stock_threshold) || 0;
-      const neededSmallestUnits = Math.max(0, minimumSmallestUnits - currentSmallestUnits);
       const zero = currentSmallestUnits <= 0;
-      html += '<tr><td>' + escapeHtml(s.name) + '</td><td class="' + (zero ? 'critical' : 'warning') + '">' + escapeHtml(formatBoxQuantity(product, currentSmallestUnits)) + (zero ? ' (خلص!)' : '') + '</td><td>' + escapeHtml(formatBoxQuantity(product, minimumSmallestUnits)) + '</td><td>' + escapeHtml(formatBoxQuantity(product, neededSmallestUnits)) + '</td><td><input type="number" min="1" step="1" class="qty-input" id="qty_' + s.product_id + '" placeholder="عدد العلب" ' + (shortageOrderMode ? '' : 'disabled') + '></td></tr>';
+      html += '<tr><td>' + escapeHtml(s.name) + '</td><td class="' + (zero ? 'critical' : 'warning') + '">' + escapeHtml(formatDynamicQuantity(product, currentSmallestUnits)) + (zero ? ' (خلص!)' : '') + '</td><td>' + escapeHtml(formatMinimumBoxes(product, minimumSmallestUnits)) + '</td><td><input type="number" min="1" step="1" class="qty-input" id="qty_' + s.product_id + '" placeholder="عدد العلب" ' + (shortageOrderMode ? '' : 'disabled') + '></td></tr>';
     }
     wrap.innerHTML = html + '</tbody></table>';
   }
