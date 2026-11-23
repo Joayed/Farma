@@ -164,7 +164,7 @@
   function formatMinimumBoxes(product, smallestUnits) {
     const perBox = totalSmallPerBox(product);
     const boxes = perBox > 0 ? (Number(smallestUnits) || 0) / perBox : 0;
-    return boxes.toLocaleString('ar-EG', { maximumFractionDigits: 2 });
+    return boxes.toLocaleString('en-US', { maximumFractionDigits: 2 });
   }
   function renderLowStock() {
     const wrap = document.getElementById('lowStockWrap');
